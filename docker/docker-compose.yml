@@ -1,7 +1,7 @@
 version: '3'
 services:
   web:
-    build: .
+    image: akwiatkowskii/api-performance-test-app
     ports:
       - "5001:5000"
     depends_on:

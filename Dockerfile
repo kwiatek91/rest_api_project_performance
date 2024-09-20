@@ -2,7 +2,6 @@ FROM python:3.9-slim
 
 WORKDIR /app
 
-# Instalacja zależności systemowych
 RUN apt-get update && apt-get install -y --no-install-recommends \
     gcc \
     default-libmysqlclient-dev \

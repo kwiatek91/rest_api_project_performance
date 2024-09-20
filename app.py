@@ -7,6 +7,7 @@ from flask_jwt_extended import (
     get_jwt_identity,
 )
 from flask_sqlalchemy import SQLAlchemy
+from flasgger import Swagger, swag_from
 import random
 import string
 
@@ -15,6 +16,20 @@ app.config['SECRET_KEY'] = 'tajny_klucz'
 app.config['SQLALCHEMY_DATABASE_URI'] = 'mysql://user:password@db:3306/database_name'
 app.config['JWT_SECRET_KEY'] = 'jwt_tajny_klucz'
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+
+# Swagger Configuration
+swagger_template = {
+    "swagger": "2.0",
+    "info": {
+        "title": "E-commerce API",
+        "description": "API documentation for the E-commerce application",
+        "version": "1.0"
+    },
+    "basePath": "/",
+    "schemes": ["http", "https"],
+}
+swagger = Swagger(app, template=swagger_template)
+
 api = Api(app)
 db = SQLAlchemy(app)
 jwt = JWTManager(app)
@@ -91,7 +106,42 @@ def initialize_database():
 
 # Endpoints
 class Login(Resource):
+    @swag_from({
+        'tags': ['Authentication'],
+        'parameters': [
+            {
+                'name': 'body',
+                'in': 'body',
+                'schema': {
+                    'type': 'object',
+                    'properties': {
+                        'username': {'type': 'string'},
+                        'password': {'type': 'string'}
+                    },
+                    'required': ['username', 'password']
+                }
+            }
+        ],
+        'responses': {
+            200: {
+                'description': 'Successful login',
+                'schema': {
+                    'type': 'object',
+                    'properties': {
+                        'access_token': {'type': 'string'}
+                    }
+                }
+            },
+            401: {
+                'description': 'Invalid login credentials'
+            }
+        }
+    })
     def post(self):
+        """
+        User login
+        ---
+        """
         data = request.get_json()
         username = data.get('username')
         password = data.get('password')
@@ -105,7 +155,39 @@ class Login(Resource):
 
 class ProductResource(Resource):
     @jwt_required()
+    @swag_from({
+        'tags': ['Products'],
+        'parameters': [
+            {
+                'name': 'product_id',
+                'in': 'path',
+                'type': 'integer',
+                'required': True,
+                'description': 'ID of the product'
+            }
+        ],
+        'responses': {
+            200: {
+                'description': 'Product details',
+                'schema': {
+                    'type': 'object',
+                    'properties': {
+                        'id': {'type': 'integer'},
+                        'name': {'type': 'string'},
+                        'price': {'type': 'number'}
+                    }
+                }
+            },
+            404: {
+                'description': 'Product not found'
+            }
+        }
+    })
     def get(self, product_id):
+        """
+        Get product details
+        ---
+        """
         product = Product.query.get(product_id)
         if product:
             return {'id': product.id, 'name': product.name, 'price': product.price}
@@ -114,13 +196,71 @@ class ProductResource(Resource):
 
 class ProductList(Resource):
     @jwt_required()
+    @swag_from({
+        'tags': ['Products'],
+        'responses': {
+            200: {
+                'description': 'List of products',
+                'schema': {
+                    'type': 'array',
+                    'items': {
+                        'type': 'object',
+                        'properties': {
+                            'id': {'type': 'integer'},
+                            'name': {'type': 'string'},
+                            'price': {'type': 'number'}
+                        }
+                    }
+                }
+            }
+        }
+    })
     def get(self):
+        """
+        Get list of products
+        ---
+        """
         products = Product.query.all()
         return [{'id': p.id, 'name': p.name, 'price': p.price} for p in products]
 
 class AddToCart(Resource):
     @jwt_required()
+    @swag_from({
+        'tags': ['Cart'],
+        'parameters': [
+            {
+                'name': 'body',
+                'in': 'body',
+                'schema': {
+                    'type': 'object',
+                    'properties': {
+                        'product_id': {'type': 'integer'}
+                    },
+                    'required': ['product_id']
+                }
+            }
+        ],
+        'responses': {
+            200: {
+                'description': 'Product added to cart',
+                'schema': {
+                    'type': 'object',
+                    'properties': {
+                        'message': {'type': 'string'},
+                        'cart_id': {'type': 'integer'}
+                    }
+                }
+            },
+            404: {
+                'description': 'User or product not found'
+            }
+        }
+    })
     def post(self):
+        """
+        Add product to cart
+        ---
+        """
         data = request.get_json()
         product_id = data.get('product_id')
         user_id = get_jwt_identity()
@@ -142,11 +282,50 @@ class AddToCart(Resource):
             cart.products = ','.join(product_ids)
 
         db.session.commit()
-        return {'message': 'Product added to cart', 'cart_id': cart.id}, 200  # Return cart_id
+        return {'message': 'Product added to cart', 'cart_id': cart.id}, 200
 
 class FinalizeOrder(Resource):
     @jwt_required()
+    @swag_from({
+        'tags': ['Order'],
+        'parameters': [
+            {
+                'name': 'body',
+                'in': 'body',
+                'schema': {
+                    'type': 'object',
+                    'properties': {
+                        'cart_id': {'type': 'integer'}
+                    },
+                    'required': ['cart_id']
+                }
+            }
+        ],
+        'responses': {
+            200: {
+                'description': 'Order placed successfully',
+                'schema': {
+                    'type': 'object',
+                    'properties': {
+                        'message': {'type': 'string'},
+                        'order_id': {'type': 'integer'},
+                        'total_price': {'type': 'number'}
+                    }
+                }
+            },
+            400: {
+                'description': 'Cart is empty or not found'
+            },
+            404: {
+                'description': 'User not found'
+            }
+        }
+    })
     def post(self):
+        """
+        Finalize order
+        ---
+        """
         data = request.get_json()
         cart_id = data.get('cart_id')
         if not cart_id:
@@ -180,7 +359,44 @@ class FinalizeOrder(Resource):
 
 class AdminOrderList(Resource):
     @jwt_required()
+    @swag_from({
+        'tags': ['Admin'],
+        'responses': {
+            200: {
+                'description': 'List of all orders',
+                'schema': {
+                    'type': 'array',
+                    'items': {
+                        'type': 'object',
+                        'properties': {
+                            'order_id': {'type': 'integer'},
+                            'user': {'type': 'string'},
+                            'products': {
+                                'type': 'array',
+                                'items': {
+                                    'type': 'object',
+                                    'properties': {
+                                        'id': {'type': 'integer'},
+                                        'name': {'type': 'string'},
+                                        'price': {'type': 'number'}
+                                    }
+                                }
+                            },
+                            'total_price': {'type': 'number'}
+                        }
+                    }
+                }
+            },
+            403: {
+                'description': 'Access denied'
+            }
+        }
+    })
     def get(self):
+        """
+        Get list of all orders (admin only)
+        ---
+        """
         user_id = get_jwt_identity()
         user = User.query.get(user_id)
         if user.username != 'admin':
